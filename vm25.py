@@ -5,9 +5,9 @@
 # Fix tomli/tomllib cho Python 3.13+
 # ======================
 try:
-    import tomllib as tomli  # Python 3.11 trở lên
+    import tomllib as tomli  # Python 3.11+
 except ImportError:
-    import tomli                # Python < 3.11
+    import tomli             # Python < 3.11
 
 import os
 import subprocess
@@ -42,13 +42,15 @@ if choice == "y":
         run("python3 -m venv ~/qemu-env")
         run("bash -c 'source ~/qemu-env/bin/activate && pip install --upgrade pip markdown packaging tomli'")
 
+        # fallback file nếu QEMU dùng import tomli
         with open("tomllib_fallback.py", "w") as f:
-            f.write("""
-try:
+            f.write(
+"""try:
     import tomllib as tomli
 except ImportError:
     import tomli
-""")
+"""
+)
 
         os.environ["PYTHONPATH"] = os.getcwd() + ":" + os.environ.get("PYTHONPATH", "")
 
@@ -78,6 +80,8 @@ else:
     print("⚡ Bỏ qua build QEMU.")
 
 # =====================
+# CHỌN WINDOWS
+# =====================
 print("\n🪟 Chọn phiên bản Windows Server muốn tải:")
 print("1️⃣ Windows Server 2012 R2")
 print("2️⃣ Windows Server 2016")
@@ -92,51 +96,67 @@ urls = {
 WIN_NAME, WIN_URL = urls.get(win_choice, urls["1"])
 print(f"💾 File VM: {WIN_NAME}")
 
+# =====================
+# DOWNLOAD
+# =====================
 if os.path.exists("win.img"):
     print("✔ win.img đã tồn tại — skip tải.")
 else:
     print("⬇ Tải bằng aria2c...")
     run(f'aria2c -x16 -s16 --continue --file-allocation=none "{WIN_URL}" -o win.img')
 
+# =====================
+# RESIZE
+# =====================
 extra_gb = input("📦 Mở rộng đĩa thêm bao nhiêu GB (default 20)? ").strip() or "20"
 run(f"qemu-img resize win.img +{extra_gb}G")
 print(f"🔧 Đĩa đã mở rộng {extra_gb} GB.")
 
+# =====================
+# DETECT CPU HOST
+# =====================
 cpu_host = subprocess.getoutput("grep -m1 'model name' /proc/cpuinfo | sed 's/^.*: //'").strip()
 print(f"🧠 CPU host detected: {cpu_host}")
 
-cpu_model = f'max,model-id=\"{cpu_host}\"'
+cpu_model = f'max,model-id="{cpu_host}"'
 cpu_core = input("⚙ CPU core (default 2): ").strip() or "2"
 ram_size = input("💾 RAM GB (default 4): ").strip() or "4"
 
+# =====================
+# START VM
+# =====================
 print("💻 Khởi động VM...")
 
-start_cmd = f\"\"\"qemu-system-x86_64 \\
-  -machine type=q35 \\
-  -cpu {cpu_model} \\
-  -smp {cpu_core} \\
-  -m {ram_size}G \\
-  -accel tcg,thread=multi,tb-size=8192,split-wx=off \\
-  -object iothread,id=io1 \\
-  -drive file=win.img,if=none,id=drive0,cache=unsafe,aio=threads,discard=on,format=raw \\
-  -device virtio-blk-pci,drive=drive0 \\
-  -vga virtio \\
-  -device virtio-gpu-pci,id=video0 \\
-  -device qemu-xhci,id=xhci \\
-  -device usb-tablet,bus=xhci.0 \\
-  -device usb-kbd,bus=xhci.0 \\
-  -netdev user,id=n0,hostfwd=tcp::3389-:3389 \\
-  -device virtio-net-pci,netdev=n0 \\
-  -display vnc=:0 \\
-  -boot order=c,menu=on \\
-  -name \"{WIN_NAME} VM\" \\
-  -daemonize \\
-> /dev/null 2>&1
-\"\"\"
+start_cmd = f"""
+qemu-system-x86_64 \
+  -machine type=q35 \
+  -cpu {cpu_model} \
+  -smp {cpu_core} \
+  -m {ram_size}G \
+  -accel tcg,thread=multi,tb-size=8192,split-wx=off \
+  -object iothread,id=io1 \
+  -drive file=win.img,if=none,id=drive0,cache=unsafe,aio=threads,discard=on,format=raw \
+  -device virtio-blk-pci,drive=drive0 \
+  -vga virtio \
+  -device virtio-gpu-pci,id=video0 \
+  -device qemu-xhci,id=xhci \
+  -device usb-tablet,bus=xhci.0 \
+  -device usb-kbd,bus=xhci.0 \
+  -netdev user,id=n0,hostfwd=tcp::3389-:3389 \
+  -device virtio-net-pci,netdev=n0 \
+  -display vnc=:0 \
+  -boot order=c,menu=on \
+  -name "{WIN_NAME} VM" \
+  -daemonize \
+  > /dev/null 2>&1
+"""
 
 run(start_cmd)
 time.sleep(3)
 
+# =====================
+# RDP TUNNEL
+# =====================
 use_rdp = ask("🛰️ Có muốn dùng RDP để kết nối đến VM không? (y/n): ", "n")
 if use_rdp == "y":
     run("wget -q https://github.com/kami2k1/tunnel/releases/latest/download/kami-tunnel-linux-amd64.tar.gz")
