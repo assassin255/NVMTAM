@@ -1,16 +1,6 @@
 #!/bin/python3.13
 # -*- coding: utf-8 -*-
 
-# Python 3.11+ dùng tomllib thay thế tomli
-try:
-    import tomllib  # Python 3.11+
-    _toml_loads = tomllib.loads
-    _toml_load = tomllib.load
-except ImportError:
-    import tomli     # Python 3.7–3.10
-    _toml_loads = tomli.loads
-    _toml_load = tomli.load
-
 __INFO__ = {
     'Obfuscator': 'Shenron',
     'Obfuscator Owner': 'Nguyễn Xuân Trịnh',
